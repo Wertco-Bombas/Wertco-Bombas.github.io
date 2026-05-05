@@ -10,6 +10,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
+        <span class="icon-user">👤</span>
         <h1>Don</h1>
       </div>
       <div id="headerUser" style="display:none;align-items:center;gap:10px">
@@ -22,12 +23,10 @@
     <!-- LOGIN -->
     <div id="loginScreen" class="login-card">
       <div class="card login-card">
-        <h2 style="margin:0 0 8px;color:var(--accent)">Entrar</h2>
+        <h2 class="login-title">Entrar</h2>
         <div class="field"><label class="small">Usuário</label><input id="loginUser" type="text"></div>
         <div class="field"><label class="small">Senha</label><input id="loginPass" type="password"></div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn" id="btnLogin">Entrar</button>
-        </div>
+        <button class="btn full" id="btnLogin">Entrar</button>
       </div>
     </div>
 
@@ -40,28 +39,21 @@
         <div class="menu-item" data-target="page-audit">Auditoria</div>
       </nav>
 
+      <div class="search-bar">
+        <input type="search" placeholder="Pesquisar títulos, descrições, categorias, comentários e nomes de arquivos..." id="searchAll">
+        <select id="filterCategory"><option value="">Todas as categorias</option></select>
+        <button class="btn">Novo Tópico</button>
+        <button class="btn">Nova Categoria</button>
+        <button class="btn warn">Excluir Categoria</button>
+      </div>
+
       <main class="layout">
         <section id="page-kb" class="page active">
-          <h2>Base de Conhecimento</h2>
-          <button class="btn" id="btnNewTopic">Novo Tópico</button>
           <div id="topicsList"></div>
         </section>
-
-        <section id="page-user" class="page">
-          <h2>Usuários</h2>
-          <div id="usersList"></div>
-        </section>
-
-        <section id="page-training" class="page">
-          <h2>Treinamento</h2>
-          <div id="trainingUpload"></div>
-          <div id="trainingFiles"></div>
-        </section>
-
-        <section id="page-audit" class="page">
-          <h2>Auditoria</h2>
-          <div id="auditLog"></div>
-        </section>
+        <section id="page-user" class="page"><div id="usersList"></div></section>
+        <section id="page-training" class="page"><div id="trainingUpload"></div><div id="trainingFiles"></div></section>
+        <section id="page-audit" class="page"><div id="auditLog"></div></section>
       </main>
 
       <footer class="small">Protótipo local — dados salvos no navegador (localStorage).</footer>
