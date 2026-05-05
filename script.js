@@ -1,178 +1,112 @@
 /* Don — script.js
-   Versão final: login funcional + Enter para logar + dashboard com aprovação básica
-   Salva dados principais em localStorage (protótipo local)
+   Login with Enter key, dashboard rendering, approvals, localStorage persistence.
 */
 
-/* Storage keys */
-const KEY_TOPICS = "don_topics_full_v1";
-const KEY_CATS = "don_categories_full_v1";
-const KEY_USERS = "don_users_full_v1";
-const KEY_AUDIT = "don_audit_full_v1";
-const KEY_TRAIN = "don_training_files_v1";
-const KEY_SESSION = "don_session_full_v1";
+const KEY_TOPICS = "don_topics_full";
+const KEY_CATS = "don_categories_full";
+const KEY_USERS = "don_users_full";
+const KEY_AUDIT = "don_audit_full";
+const KEY_TRAIN = "don_training_files";
+const KEY_SESSION = "don_session_full";
 
-/* Helpers */
-const $ = id => document.getElementById(id);
-const idGen = () => 'id_' + Math.random().toString(36).slice(2,9);
-const escapeHtml = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+function idGen(){ return 'id_' + Math.random().toString(36).slice(2,9); }
+function $(id){ return document.getElementById(id); }
+function escapeHtml(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
 
-function persist(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
-function load(key, fallback){ try{ const v = JSON.parse(localStorage.getItem(key)); return v === null ? fallback : (v || fallback); } catch(e){ return fallback; } }
-
-/* Seed data */
-let users = load(KEY_USERS, [
+let users = JSON.parse(localStorage.getItem(KEY_USERS) || "null") || [
   { username: "admin", password: "admin", name: "Administrador", role: "Admin" },
   { username: "supervisor", password: "supervisor", name: "Supervisor Exemplo", role: "Supervisor" },
   { username: "user", password: "user", name: "Usuário Comum", role: "User" }
-]);
+];
+localStorage.setItem(KEY_USERS, JSON.stringify(users));
 
-let categories = load(KEY_CATS, ["HTML","CSS","JavaScript"]);
+let categories = JSON.parse(localStorage.getItem(KEY_CATS) || "null") || ["HTML","CSS","JavaScript"];
+localStorage.setItem(KEY_CATS, JSON.stringify(categories));
 
-let topics = load(KEY_TOPICS, [
+let topics = JSON.parse(localStorage.getItem(KEY_TOPICS) || "null") || [
   { id: idGen(), title: "HTML Básico", content: "Estrutura de páginas web.", category: "HTML", media: [], comments: [
-    { id: idGen(), author: "user", authorName: "Usuário Comum", text: "Comentário pendente", media: [], ts: new Date("2026-05-04T17:54:51").getTime(), status: "pending" }
-  ] },
+      { id: idGen(), author: "user", authorName: "Usuário Comum", text: "Comentário pendente", media: [], ts: new Date("2026-05-04T17:54:51").getTime(), status: "pending" }
+    ] },
   { id: idGen(), title: "CSS Avançado", content: "Estilização e responsividade.", category: "CSS", media: [], comments: [] }
-]);
+];
+localStorage.setItem(KEY_TOPICS, JSON.stringify(topics));
 
-let audit = load(KEY_AUDIT, []);
-let trainingFiles = load(KEY_TRAIN, []);
-let session = load(KEY_SESSION, null);
+if(!localStorage.getItem(KEY_AUDIT)) localStorage.setItem(KEY_AUDIT, JSON.stringify([]));
+if(!localStorage.getItem(KEY_TRAIN)) localStorage.setItem(KEY_TRAIN, JSON.stringify([]));
 
-/* Save initial seeds if missing */
-persist(KEY_USERS, users);
-persist(KEY_CATS, categories);
-persist(KEY_TOPICS, topics);
-persist(KEY_AUDIT, audit);
-persist(KEY_TRAIN, trainingFiles);
+function persistTopics(){ localStorage.setItem(KEY_TOPICS, JSON.stringify(topics)); }
+function persistCats(){ localStorage.setItem(KEY_CATS, JSON.stringify(categories)); }
+function persistUsers(){ localStorage.setItem(KEY_USERS, JSON.stringify(users)); }
+function persistAudit(msg){ const arr = JSON.parse(localStorage.getItem(KEY_AUDIT) || "[]"); arr.unshift(`${new Date().toLocaleString()} — ${msg}`); localStorage.setItem(KEY_AUDIT, JSON.stringify(arr.slice(0,500))); }
+function persistTrainingFiles(arr){ localStorage.setItem(KEY_TRAIN, JSON.stringify(arr)); }
 
-/* UI initialization */
-document.addEventListener('DOMContentLoaded', () => {
-  // Attach login handlers
-  $('btnLogin').addEventListener('click', doLogin);
-  $('btnLogout').addEventListener('click', doLogout);
+function getSession(){ return JSON.parse(localStorage.getItem(KEY_SESSION) || "null"); }
+function setSession(s){ localStorage.setItem(KEY_SESSION, JSON.stringify(s)); }
+function clearSession(){ localStorage.removeItem(KEY_SESSION); }
 
-  // Enter key on inputs
-  ['loginUser','loginPass'].forEach(id => {
-    $(id).addEventListener('keydown', (e) => {
-      if(e.key === 'Enter') doLogin();
-    });
-  });
+/* UI helpers */
+function showLogin(){ $("loginScreen").style.display = "block"; $("dashboard").style.display = "none"; $("headerUser").style.display = "none"; }
+function showDashboard(){ $("loginScreen").style.display = "none"; $("dashboard").style.display = "block"; $("headerUser").style.display = "flex"; updateHeader(); configureAccess(); showSection('page-kb'); renderAll(); checkPendingForSupervisor(); }
 
-  // Menu navigation
-  document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
-    item.addEventListener('click', ()=>{
-      if(item.classList.contains('disabled')) return;
-      const target = item.getAttribute('data-target');
-      showSection(target);
-    });
-  });
-
-  // KB actions
-  $('btnNewTopic').addEventListener('click', ()=> openNewTopic());
-  $('btnNewCategory').addEventListener('click', ()=> openNewCategory());
-  $('btnDeleteCategoryTop').addEventListener('click', ()=> openDeleteCategory());
-
-  // User management
-  $('btnCreateUser').addEventListener('click', createUser);
-
-  // Training upload handler will be rendered in renderTraining()
-
-  // Restore session if exists
-  if(session && session.username){
-    showDashboard();
-  } else {
-    showLogin();
-  }
-
-  updateCategorySelects();
-  renderAll();
-});
-
-/* Login / Logout */
-function doLogin(){
-  const u = $('loginUser').value.trim();
-  const p = $('loginPass').value;
-  if(!u || !p){ alert("Preencha usuário e senha."); return; }
-  users = load(KEY_USERS, users);
-  const found = users.find(x => x.username === u && x.password === p);
-  if(!found){ alert("Usuário ou senha inválidos"); return; }
-  session = { username: found.username, name: found.name, role: found.role, ts: Date.now() };
-  persist(KEY_SESSION, session);
-  showDashboard();
-  renderAll();
+function updateHeader(){
+  const s = getSession();
+  if(!s){ $("headerUser").style.display = "none"; return; }
+  $("headerUser").style.display = "flex";
+  $("headerName").textContent = s.name || s.username;
+  $("headerRole").textContent = `(${s.role})`;
 }
 
-function doLogout(){
-  session = null;
-  localStorage.removeItem(KEY_SESSION);
-  showLogin();
-}
-
-/* Show/hide screens */
-function showLogin(){
-  $('loginScreen').style.display = 'block';
-  $('dashboard').style.display = 'none';
-  $('loginUser').focus();
-  $('headerUser').style.display = 'none';
-}
-
-function showDashboard(){
-  $('loginScreen').style.display = 'none';
-  $('dashboard').style.display = 'block';
-  $('headerUser').style.display = 'flex';
-  $('headerName').innerText = session.name || session.username;
-  $('headerRole').innerText = `(${session.role})`;
-  configureAccess();
+/* Navigation */
+function showSection(id){
+  document.querySelectorAll('.page').forEach(p=>{ p.classList.remove('active'); p.style.display = 'none'; });
+  const el = $(id);
+  if(el){ el.classList.add('active'); el.style.display = 'block'; }
+  const kbBar = $("kbSearchBar");
+  if(id === 'page-kb'){ kbBar.style.display = 'flex'; updateCategorySelects(); renderTopics(); }
+  else kbBar.style.display = 'none';
+  if(id === 'page-audit') renderAudit();
+  if(id === 'page-training') renderTraining();
+  if(id === 'page-user') renderUsers();
 }
 
 /* Access control */
+function normRole(r){ return (r||"").toString().trim().toLowerCase(); }
 function configureAccess(){
-  const role = session ? session.role.toLowerCase() : "";
-  const menuUser = document.querySelector('[data-target="page-user"]');
-  const menuAudit = document.querySelector('[data-target="page-audit"]');
-  if(role === 'admin' || role === 'supervisor'){
-    menuUser.classList.remove('disabled'); menuAudit.classList.remove('disabled');
-  } else {
-    menuUser.classList.add('disabled'); menuAudit.classList.add('disabled');
-  }
-  // Show/hide KB action buttons for non-managers
-  const canManage = (role === 'admin' || role === 'supervisor');
-  $('btnNewTopic').style.display = canManage ? 'inline-flex' : 'none';
-  $('btnNewCategory').style.display = canManage ? 'inline-flex' : 'none';
-  $('btnDeleteCategoryTop').style.display = canManage ? 'inline-flex' : 'none';
-  populateNewUserRoleOptions(role === 'admin');
+  const s = getSession(); const role = s ? normRole(s.role) : "";
+  document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
+    if(item.getAttribute('data-target') === 'page-user' || item.getAttribute('data-target') === 'page-audit'){
+      if(role === "admin" || role === "supervisor"){ item.classList.remove('disabled'); item.removeAttribute('aria-disabled'); }
+      else { item.classList.add('disabled'); item.setAttribute('aria-disabled','true'); }
+    }
+  });
+  const canManage = (role === "admin" || role === "supervisor");
+  $("btnNewTopic").style.display = canManage ? 'inline-flex' : 'none';
+  $("btnNewCategory").style.display = canManage ? 'inline-flex' : 'none';
+  $("btnDeleteCategoryTop").style.display = canManage ? 'inline-flex' : 'none';
+  populateNewUserRoleOptions(role === "admin");
 }
 
-/* Sections */
-function showSection(id){
-  document.querySelectorAll('.page').forEach(p=>{
-    if(p.id === id){ p.classList.add('active'); p.style.display = 'block'; p.setAttribute('aria-hidden','false'); }
-    else { p.classList.remove('active'); p.style.display = 'none'; p.setAttribute('aria-hidden','true'); }
-  });
-  if(id === 'page-kb'){ renderTopics(); }
-  if(id === 'page-user'){ renderUsers(); }
-  if(id === 'page-training'){ renderTraining(); }
-  if(id === 'page-audit'){ renderAudit(); }
+function populateNewUserRoleOptions(isAdmin){
+  const sel = $("newRole"); if(!sel) return;
+  sel.innerHTML = "";
+  if(isAdmin){ ["Admin","Supervisor","User"].forEach(r=> sel.insertAdjacentHTML('beforeend', `<option value="${r}">${r}</option>`)); }
+  else { sel.insertAdjacentHTML('beforeend', `<option value="User">User</option>`); sel.value = "User"; }
 }
 
 /* Categories */
 function updateCategorySelects(){
   categories = Array.from(new Set(categories.filter(Boolean)));
-  persist(KEY_CATS, categories);
-  const filter = $('filterCategory');
-  filter.innerHTML = `<option value="">Todas as categorias</option>`;
-  categories.forEach(c => filter.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`));
+  persistCats();
+  const filter = $("filterCategory"), topicCat = $("topicCategory"), deleteSel = $("deleteCategorySelect");
+  [filter, topicCat, deleteSel].forEach(s=>{ if(!s) return; s.innerHTML = `<option value="">Todas as categorias</option>`; categories.forEach(c=> s.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)); });
 }
 
-/* Topics rendering and comment flows */
+/* Render topics */
 function renderTopics(){
-  const q = ($('searchAll') && $('searchAll').value || "").trim().toLowerCase();
-  const cat = ($('filterCategory') && $('filterCategory').value) || "";
-  const container = $('topicsList');
-  topics = load(KEY_TOPICS, topics);
-  container.innerHTML = "";
-  const filtered = topics.filter(t => {
+  const q = ($("searchAll") ? $("searchAll").value.trim().toLowerCase() : "");
+  const cat = ($("filterCategory") ? $("filterCategory").value : "");
+  const container = $("topicsList"); container.innerHTML = "";
+  const filtered = topics.filter(t=>{
     const matchCat = !cat || t.category === cat;
     if(!q) return matchCat;
     const inTitle = (t.title||"").toLowerCase().includes(q);
@@ -182,24 +116,21 @@ function renderTopics(){
     return matchCat && (inTitle || inContent || inCategory || commentsText.includes(q));
   });
 
-  if(filtered.length === 0){
-    container.innerHTML = `<div class="topic"><div class="small">Nenhum tópico encontrado.</div></div>`;
-    return;
-  }
+  if(filtered.length === 0){ container.innerHTML = `<div class="topic"><div class="small">Nenhum tópico encontrado.</div></div>`; return; }
 
-  filtered.forEach(t => {
+  filtered.forEach(t=>{
     const article = document.createElement('article');
     article.className = 'topic';
     article.id = `topic-${t.id}`;
     const catHtml = t.category ? `<div class="badge">${escapeHtml(t.category)}</div>` : `<div class="small">Sem categoria</div>`;
-    const commentsHtml = (t.comments||[]).map(c => {
+    const commentsHtml = (t.comments||[]).map(c=>{
       const statusClass = c.status === "pending" ? "status-pending" : (c.status === "approved" ? "status-approved" : "status-rejected");
       const statusLabel = c.status === "pending" ? "Pendente" : (c.status === "approved" ? "Aprovado" : "Rejeitado");
       const author = escapeHtml(c.authorName || c.author);
       const commentId = c.id;
+      const sess = getSession(); const role = sess ? normRole(sess.role) : "";
       let actions = "";
-      const role = session ? session.role.toLowerCase() : "";
-      if(session && (role === "admin" || role === "supervisor") && c.status === "pending"){
+      if(sess && (role === "admin" || role === "supervisor") && c.status === "pending"){
         actions += `<button class="btn" data-action="approve-comment" data-topic="${t.id}" data-cid="${commentId}">Aprovar</button>`;
         actions += `<button class="btn warn" data-action="reject-comment" data-topic="${t.id}" data-cid="${commentId}">Rejeitar</button>`;
       }
@@ -209,13 +140,12 @@ function renderTopics(){
     article.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
         <div style="flex:1">
-          <h3 style="margin:0;color:var(--accent)">${escapeHtml(t.title)}</h3>
+          <h3>${escapeHtml(t.title)}</h3>
           <div class="small" style="margin-top:6px">${escapeHtml(t.content)}</div>
         </div>
         <div>${catHtml}</div>
       </div>
-      <div style="margin-top:10px"><strong class="small">Comentários</strong>${commentsHtml || `<div class="small" style="margin-top:6px">Sem comentários</div>`}</div>
-
+      ${commentsHtml || `<div class="small" style="margin-top:10px">Sem comentários</div>`}
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
         <input type="text" placeholder="Adicionar comentário" id="comment-text-${t.id}" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)">
         <button class="btn" data-action="send-comment" data-id="${t.id}">Enviar</button>
@@ -224,62 +154,55 @@ function renderTopics(){
     container.appendChild(article);
   });
 
-  attachTopicEventHandlers();
-  updatePendingPanel();
+  attachCommentActionHandlers();
 }
 
-/* Attach comment action handlers */
-function attachTopicEventHandlers(){
-  // send comment
+/* Comment actions */
+function attachCommentActionHandlers(){
   document.querySelectorAll('button[data-action="send-comment"]').forEach(btn=>{
-    btn.onclick = () => {
-      const tid = btn.getAttribute('data-id');
-      const textEl = $(`comment-text-${tid}`);
-      const text = (textEl && textEl.value.trim()) || "";
+    btn.onclick = ()=>{
+      const id = btn.getAttribute('data-id');
+      const textEl = $(`comment-text-${id}`);
+      const text = textEl.value.trim();
       if(!text) return alert("Digite um comentário.");
-      if(!session) return alert("Faça login para comentar.");
-      const role = session.role.toLowerCase();
+      const sess = getSession(); if(!sess) return alert("Faça login para comentar.");
+      const role = normRole(sess.role);
       const status = (role === "user") ? "pending" : "approved";
-      const comment = { id: idGen(), author: session.username, authorName: session.name, text, media: [], ts: Date.now(), status };
-      const topic = topics.find(t => t.id === tid);
+      const comment = { id: idGen(), author: sess.username, authorName: sess.name, text, media: [], ts: Date.now(), status };
+      const topic = topics.find(t=> t.id === id);
       if(!topic) return alert("Tópico não encontrado.");
       topic.comments = topic.comments || [];
       topic.comments.push(comment);
-      persist(KEY_TOPICS, topics);
-      persistAudit(`Comentário "${comment.id}" no tópico "${topic.title}" por ${session.username} (status: ${status})`);
+      persistTopics();
+      persistAudit(`Comentário "${comment.id}" no tópico "${topic.title}" por ${sess.username} (status: ${status})`);
       if(status === "pending") notifySupervisorsPending();
       textEl.value = "";
       renderTopics();
     };
   });
 
-  // approve/reject
   document.querySelectorAll('button[data-action="approve-comment"]').forEach(btn=>{
-    btn.onclick = () => {
-      const tid = btn.getAttribute('data-topic'); const cid = btn.getAttribute('data-cid');
-      if(!session) return alert("Faça login.");
-      const role = session.role.toLowerCase(); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
-      const topic = topics.find(t => t.id === tid); if(!topic) return;
-      const comment = topic.comments.find(c => c.id === cid); if(!comment) return;
-      comment.status = "approved"; comment.approvedBy = session.username; comment.approvedAt = Date.now();
-      persist(KEY_TOPICS, topics);
-      persistAudit(`Comentário "${cid}" aprovado por ${session.username}`);
-      renderTopics(); renderAudit();
+    btn.onclick = ()=>{
+      const topicId = btn.getAttribute('data-topic'); const cid = btn.getAttribute('data-cid');
+      const sess = getSession(); if(!sess) return alert("Faça login.");
+      const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
+      const topic = topics.find(t=> t.id === topicId); if(!topic) return;
+      const comment = topic.comments.find(c=> c.id === cid); if(!comment) return;
+      comment.status = "approved"; comment.approvedBy = sess.username; comment.approvedAt = Date.now();
+      persistTopics(); persistAudit(`Comentário "${cid}" aprovado por ${sess.username}`); renderTopics(); renderAudit();
     };
   });
 
   document.querySelectorAll('button[data-action="reject-comment"]').forEach(btn=>{
-    btn.onclick = () => {
-      const tid = btn.getAttribute('data-topic'); const cid = btn.getAttribute('data-cid');
-      if(!session) return alert("Faça login.");
-      const role = session.role.toLowerCase(); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
-      const topic = topics.find(t => t.id === tid); if(!topic) return;
-      const comment = topic.comments.find(c => c.id === cid); if(!comment) return;
+    btn.onclick = ()=>{
+      const topicId = btn.getAttribute('data-topic'); const cid = btn.getAttribute('data-cid');
+      const sess = getSession(); if(!sess) return alert("Faça login.");
+      const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
+      const topic = topics.find(t=> t.id === topicId); if(!topic) return;
+      const comment = topic.comments.find(c=> c.id === cid); if(!comment) return;
       const reason = prompt("Motivo da rejeição (opcional):", "");
-      comment.status = "rejected"; comment.rejectedBy = session.username; comment.rejectedAt = Date.now(); comment.rejectionReason = reason || "";
-      persist(KEY_TOPICS, topics);
-      persistAudit(`Comentário "${cid}" rejeitado por ${session.username} (${reason || "sem motivo"})`);
-      renderTopics(); renderAudit();
+      comment.status = "rejected"; comment.rejectedBy = sess.username; comment.rejectedAt = Date.now(); comment.rejectionReason = reason || "";
+      persistTopics(); persistAudit(`Comentário "${cid}" rejeitado por ${sess.username} (${reason || "sem motivo"})`); renderTopics(); renderAudit();
     };
   });
 }
@@ -287,64 +210,18 @@ function attachTopicEventHandlers(){
 /* Pending notifications */
 function getPendingComments(){
   const arr = [];
-  topics.forEach(t => {
-    (t.comments||[]).forEach(c => {
+  topics.forEach(t=>{
+    (t.comments||[]).forEach(c=>{
       if(c.status === "pending") arr.push({ topicId: t.id, topicTitle: t.title, commentId: c.id, author: c.author, ts: c.ts });
     });
   });
   return arr;
 }
 
-function notifySupervisorsPending(){
-  // If current user is supervisor/admin, show central popup; otherwise pending panel will be visible when supervisors log in
-  if(!session) return;
-  const role = session.role.toLowerCase();
-  if(role === "admin" || role === "supervisor") showCentralPendingPopup();
-  else updatePendingPanel();
-}
-
-function showCentralPendingPopup(){
-  const pending = getPendingComments();
-  if(pending.length === 0) return;
-  const container = $('popupContainer'); container.innerHTML = "";
-  const overlay = document.createElement('div'); overlay.className = 'popup-overlay';
-  const box = document.createElement('div'); box.className = 'popup-box';
-  box.innerHTML = `<h3>Existem ${pending.length} comentários pendentes</h3><div id="centralPendingList" style="margin-top:10px"></div><div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn ghost" id="centralClose">Fechar</button></div>`;
-  overlay.appendChild(box);
-  container.appendChild(overlay);
-  const list = box.querySelector('#centralPendingList');
-  pending.slice(0,8).forEach(p=>{
-    const item = document.createElement('div'); item.style.marginTop='8px';
-    item.innerHTML = `<div class="small"><strong>${escapeHtml(p.topicTitle)}</strong> — comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div><div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end"><button class="btn visit" data-action="goto-pending" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div>`;
-    list.appendChild(item);
-  });
-  box.querySelectorAll('button[data-action="goto-pending"]').forEach(b=>{
-    b.onclick = ()=> {
-      const tid = b.getAttribute('data-topic'); const cid = b.getAttribute('data-cid');
-      closeCentralPopup();
-      showSection('page-kb'); renderTopics();
-      setTimeout(()=> {
-        const el = document.getElementById(`comment-${cid}`);
-        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 2000); }
-      }, 200);
-    };
-  });
-  $('centralClose').onclick = () => closeCentralPopup();
-}
-
-function closeCentralPopup(){ $('popupContainer').innerHTML = ""; }
-
 function updatePendingPanel(){
-  // bottom-right panel (rendered only when there are pending comments)
-  let panel = document.getElementById('pendingPanel');
-  if(!panel){
-    panel = document.createElement('div'); panel.id = 'pendingPanel'; panel.className = 'pending-panel'; panel.style.display = 'none';
-    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><strong>Comentários pendentes</strong><button class="btn ghost" id="btnClosePending">Fechar</button></div><div id="pendingList" style="margin-top:8px"></div>`;
-    document.body.appendChild(panel);
-    document.getElementById('btnClosePending').onclick = ()=> panel.style.display = 'none';
-  }
   const pending = getPendingComments();
-  const list = $('pendingList');
+  const panel = $("pendingPanel");
+  const list = $("pendingList");
   if(pending.length === 0){ panel.style.display = 'none'; list.innerHTML = ''; return; }
   panel.style.display = 'block';
   list.innerHTML = '';
@@ -359,71 +236,68 @@ function updatePendingPanel(){
       showSection('page-kb'); renderTopics();
       setTimeout(()=> {
         const el = document.getElementById(`comment-${cid}`);
-        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 2000); }
+        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 2500); }
       }, 200);
     };
   });
+  $("btnClosePending").onclick = ()=> { panel.style.display = 'none'; };
 }
 
-/* Audit */
-function persistAudit(msg){
-  const arr = load(KEY_AUDIT, audit);
-  arr.unshift(`${new Date().toLocaleString()} — ${msg}`);
-  persist(KEY_AUDIT, arr.slice(0,500));
-  audit = arr;
-}
-
-function renderAudit(){
-  const panel = $('auditLog');
-  const sess = session;
-  const role = sess ? sess.role.toLowerCase() : "";
-  const logs = load(KEY_AUDIT, audit);
-  const pending = getPendingComments();
-  let html = "";
-  if(role === "supervisor"){
-    html += `<div style="margin-bottom:8px"><strong class="small">Pendências de aprovação</strong></div>`;
-    if(pending.length === 0) html += `<div class="small">Sem pendências.</div>`;
-    else pending.forEach(p => html += `<div class="audit-item"><div class="info small"><strong>${escapeHtml(p.topicTitle)}</strong><div style="margin-top:4px">Comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div></div><div class="goto"><button class="btn visit" data-action="audit-goto" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div></div>`);
-    panel.innerHTML = html;
+function notifySupervisorsPending(){
+  const sess = getSession(); if(!sess) return;
+  const role = normRole(sess.role);
+  if(role === "admin" || role === "supervisor"){
+    showCentralPendingPopup();
   } else {
-    if(pending.length > 0){
-      html += `<div style="margin-bottom:8px"><strong class="small">Pendências de aprovação</strong></div>`;
-      pending.forEach(p => html += `<div class="audit-item"><div class="info small"><strong>${escapeHtml(p.topicTitle)}</strong><div style="margin-top:4px">Comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div></div><div class="goto"><button class="btn visit" data-action="audit-goto" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div></div>`);
-      html += `<hr style="border-color:rgba(255,255,255,0.04);margin:8px 0">`;
-    }
-    if(!logs || logs.length === 0) html += `<div class="small">Sem registros.</div>`; else html += logs.map(l=> `<div class="small" style="margin-bottom:6px">${escapeHtml(l)}</div>`).join('');
-    panel.innerHTML = html;
+    updatePendingPanel();
   }
+}
 
-  // attach goto handlers
-  panel.querySelectorAll('button[data-action="audit-goto"]').forEach(b=>{
+function showCentralPendingPopup(){
+  const pending = getPendingComments();
+  if(pending.length === 0) return;
+  const container = $("popupContainer"); container.innerHTML = "";
+  const overlay = document.createElement('div'); overlay.className = 'popup-overlay';
+  const box = document.createElement('div'); box.className = 'popup-box';
+  box.innerHTML = `<h3>Existem ${pending.length} comentários pendentes</h3><div id="centralPendingList" style="margin-top:10px"></div><div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn ghost" id="centralClose">Fechar</button></div>`;
+  overlay.appendChild(box); container.appendChild(overlay);
+  const list = box.querySelector('#centralPendingList');
+  pending.slice(0,8).forEach(p=>{
+    const item = document.createElement('div'); item.style.marginTop='8px';
+    item.innerHTML = `<div class="small"><strong>${escapeHtml(p.topicTitle)}</strong> — comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div><div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end"><button class="btn visit" data-action="goto-pending" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div>`;
+    list.appendChild(item);
+  });
+  box.querySelectorAll('button[data-action="goto-pending"]').forEach(b=>{
     b.onclick = ()=> {
       const tid = b.getAttribute('data-topic'); const cid = b.getAttribute('data-cid');
+      closeCentralPopup();
       showSection('page-kb'); renderTopics();
       setTimeout(()=> {
         const el = document.getElementById(`comment-${cid}`);
-        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 2000); }
+        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 3000); }
       }, 200);
     };
   });
+  $("centralClose").onclick = ()=> closeCentralPopup();
 }
+
+function closeCentralPopup(){ $("popupContainer").innerHTML = ""; }
 
 /* Training */
 function renderTraining(){
-  const sess = session;
-  const up = $('trainingUpload');
-  const filesList = $('trainingFiles');
-  const stored = load(KEY_TRAIN, trainingFiles);
-  filesList.innerHTML = stored.map(f=> `<div class="small">${escapeHtml(f)}</div>`).join("");
+  const sess = getSession();
+  const up = $("trainingUpload");
+  const stored = JSON.parse(localStorage.getItem(KEY_TRAIN) || "[]");
+  $("trainingFiles").innerHTML = stored.map(f=> `<div class="small">${escapeHtml(f)}</div>`).join("");
   if(!sess){ up.innerHTML = `<div class="small">Faça login para acessar o treinamento.</div>`; return; }
-  const role = sess.role.toLowerCase();
+  const role = normRole(sess.role);
   if(role === "admin" || role === "supervisor"){
     up.innerHTML = `<input type="file" id="trainFile" multiple accept=".pdf,.doc,.docx,video/*"><div style="margin-top:8px"><button class="btn" id="btnUploadTrain">Enviar</button></div>`;
-    $('btnUploadTrain').onclick = ()=> {
-      const input = $('trainFile');
+    $("btnUploadTrain").onclick = ()=> {
+      const input = $("trainFile");
       const files = Array.from(input.files || []);
       const allowed = ['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      const storedFiles = load(KEY_TRAIN, trainingFiles);
+      const storedFiles = JSON.parse(localStorage.getItem(KEY_TRAIN) || "[]");
       files.forEach(f=>{
         if(f.type.startsWith('video/') || allowed.includes(f.type) || f.name.match(/\.(pdf|doc|docx)$/i)){
           storedFiles.push(f.name);
@@ -431,7 +305,7 @@ function renderTraining(){
           alert(`Arquivo "${f.name}" não é permitido e foi ignorado.`);
         }
       });
-      persist(KEY_TRAIN, storedFiles);
+      localStorage.setItem(KEY_TRAIN, JSON.stringify(storedFiles));
       renderTraining();
       persistAudit(`Arquivos de treinamento enviados por ${sess.username}`);
     };
@@ -440,35 +314,13 @@ function renderTraining(){
   }
 }
 
-/* User management */
-function populateNewUserRoleOptions(isAdmin){
-  const sel = $('newRole'); sel.innerHTML = "";
-  if(isAdmin){ ["Admin","Supervisor","User"].forEach(r=> sel.insertAdjacentHTML('beforeend', `<option value="${r}">${r}</option>`)); }
-  else { sel.insertAdjacentHTML('beforeend', `<option value="User">User</option>`); sel.value = "User"; }
-}
-
-function createUser(){
-  const s = session; if(!s) return alert("Faça login.");
-  const roleCurrent = s.role.toLowerCase(); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
-  let name = $('newName').value.trim(); let username = $('newLogin').value.trim(); let pass = $('newPass').value; let role = $('newRole').value || "User";
-  if(!name || !username || !pass) return alert("Preencha nome, usuário e senha.");
-  users = load(KEY_USERS, users);
-  if(users.some(u=> u.username === username)) return alert("Usuário já existe.");
-  if(roleCurrent === "supervisor") role = "User";
-  users.push({ username, password: pass, name, role }); persist(KEY_USERS, users);
-  persistAudit(`Usuário "${username}" criado por ${s.username} com papel ${role}`);
-  $('newName').value = ""; $('newLogin').value = ""; $('newPass').value = "";
-  renderUsers();
-  alert(`Usuário "${username}" criado.`);
-}
-
+/* Users management */
 function renderUsers(){
-  const container = $('usersList'); container.innerHTML = "";
-  users = load(KEY_USERS, users);
+  const container = $("usersList"); container.innerHTML = "";
+  users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
   users.forEach(u=>{
-    const el = document.createElement('div'); el.className = 'user-item card';
-    el.style.marginBottom = '8px';
-    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div><strong style="color:var(--accent)">${escapeHtml(u.name)}</strong><div class="small">${escapeHtml(u.username)} — ${escapeHtml(u.role)}</div></div><div style="display:flex;gap:8px"><button class="btn ghost" data-action="edit-name" data-user="${escapeHtml(u.username)}">Editar</button><button class="btn ghost" data-action="change-pass" data-user="${escapeHtml(u.username)}">Alterar senha</button><button class="btn warn" data-action="delete-user" data-user="${escapeHtml(u.username)}">Excluir</button></div></div>`;
+    const el = document.createElement('div'); el.className = 'user-item';
+    el.innerHTML = `<div><strong style="color:var(--accent)">${escapeHtml(u.name)}</strong><div class="small">${escapeHtml(u.username)} — ${escapeHtml(u.role)}</div></div><div class="controls"><button class="btn ghost" data-action="edit-name" data-user="${escapeHtml(u.username)}">Editar</button><button class="btn ghost" data-action="change-pass" data-user="${escapeHtml(u.username)}">Alterar senha</button><button class="btn warn" data-action="delete-user" data-user="${escapeHtml(u.username)}">Excluir</button></div>`;
     container.appendChild(el);
   });
   container.querySelectorAll('button[data-action="edit-name"]').forEach(b=> b.onclick = ()=> editUserName(b.getAttribute('data-user')));
@@ -477,32 +329,32 @@ function renderUsers(){
 }
 
 function editUserName(username){
-  const s = session; if(!s) return alert("Faça login.");
-  const roleCurrent = s.role.toLowerCase(); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
-  users = load(KEY_USERS, users);
+  const s = getSession(); if(!s) return alert("Faça login.");
+  const roleCurrent = normRole(s.role); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
+  users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
   const u = users.find(x=> x.username === username); if(!u) return alert("Usuário não encontrado.");
   const newName = prompt("Novo nome:", u.name); if(!newName) return;
-  u.name = newName; persist(KEY_USERS, users); persistAudit(`Nome do usuário ${username} alterado para "${newName}" por ${s.username}`); renderUsers(); alert("Nome atualizado.");
+  u.name = newName; persistUsers(); persistAudit(`Nome do usuário ${username} alterado para "${newName}" por ${s.username}`); renderUsers(); alert("Nome atualizado.");
 }
 
 function changeUserPassword(username){
-  const s = session; if(!s) return alert("Faça login.");
-  const roleCurrent = s.role.toLowerCase(); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
-  users = load(KEY_USERS, users);
+  const s = getSession(); if(!s) return alert("Faça login.");
+  const roleCurrent = normRole(s.role); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
+  users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
   const u = users.find(x=> x.username === username); if(!u) return alert("Usuário não encontrado.");
-  if(roleCurrent === "supervisor" && u.role.toLowerCase() === "admin") return alert("Supervisor não pode alterar senha do Admin.");
+  if(roleCurrent === "supervisor" && normRole(u.role) === "admin") return alert("Supervisor não pode alterar senha do Admin.");
   const newPass = prompt(`Digite a nova senha para "${username}":`); if(!newPass) return alert("Operação cancelada.");
-  u.password = newPass; persist(KEY_USERS, users); persistAudit(`Senha de ${username} alterada por ${s.username}`); alert("Senha alterada.");
+  u.password = newPass; persistUsers(); persistAudit(`Senha de ${username} alterada por ${s.username}`); alert("Senha alterada.");
 }
 
 function deleteUser(username){
-  const s = session; if(!s) return alert("Faça login.");
-  const roleCurrent = s.role.toLowerCase(); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
-  users = load(KEY_USERS, users);
+  const s = getSession(); if(!s) return alert("Faça login.");
+  const roleCurrent = normRole(s.role); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
+  users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
   const target = users.find(u=> u.username === username); if(!target) return alert("Usuário não encontrado.");
-  if(target.role.toLowerCase() === "admin"){
+  if(normRole(target.role) === "admin"){
     if(roleCurrent === "supervisor") return alert("Supervisor não pode excluir usuário Admin.");
-    const otherAdmins = users.filter(u=> u.username !== username && u.role.toLowerCase() === "admin").length;
+    const otherAdmins = users.filter(u=> u.username !== username && normRole(u.role) === "admin").length;
     if(otherAdmins === 0){
       const confirmText = prompt("Você está prestes a excluir o último Admin. Para confirmar, digite CONFIRMAR (maiúsculo).");
       if(confirmText !== "CONFIRMAR"){ alert("Operação cancelada."); return; }
@@ -512,54 +364,149 @@ function deleteUser(username){
   } else {
     if(!confirm(`Deseja excluir o usuário "${username}"?`)) return;
   }
-  users = users.filter(u=> u.username !== username); persist(KEY_USERS, users); persistAudit(`Usuário "${username}" excluído por ${s.username}`); renderUsers(); alert(`Usuário "${username}" excluído.`);
+  users = users.filter(u=> u.username !== username); persistUsers(); persistAudit(`Usuário "${username}" excluído por ${s.username}`); renderUsers(); alert(`Usuário "${username}" excluído.`);
 }
 
-/* Topic/category flows (simplified UI for create/delete) */
-function openNewTopic(){
-  const s = session; if(!s) return alert("Faça login.");
-  const role = s.role.toLowerCase(); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
-  const title = prompt("Título do tópico:");
-  if(!title) return;
-  const content = prompt("Descrição do tópico:", "");
-  const category = prompt("Categoria (ex: HTML, CSS):", categories[0] || "");
-  const status = (role === "user") ? "pending" : "approved";
-  const t = { id: idGen(), title, content: content || "", category: category || "", media: [], comments: [], status };
-  topics.push(t); persist(KEY_TOPICS, topics);
-  persistAudit(`Tópico "${title}" criado por ${s.username} (status: ${status})`);
-  if(status === "pending") notifySupervisorsPending();
-  renderTopics();
+/* Audit */
+function renderAudit(){
+  const panel = $("auditLog");
+  const sess = getSession();
+  const role = sess ? normRole(sess.role) : "";
+  const logs = JSON.parse(localStorage.getItem(KEY_AUDIT) || "[]");
+  const pending = getPendingComments();
+  let html = "";
+
+  if(role === "supervisor"){
+    html += `<div style="margin-bottom:8px"><strong class="small">Pendências de aprovação</strong></div>`;
+    if(pending.length === 0) html += `<div class="small">Sem pendências.</div>`;
+    else {
+      pending.forEach(p=>{
+        html += `<div class="audit-item"><div class="info small"><strong>${escapeHtml(p.topicTitle)}</strong><div style="margin-top:4px">Comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div></div><div class="goto"><button class="btn visit" data-action="audit-goto" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div></div>`;
+      });
+    }
+    panel.innerHTML = html;
+  } else {
+    if(pending.length > 0){
+      html += `<div style="margin-bottom:8px"><strong class="small">Pendências de aprovação</strong></div>`;
+      pending.forEach(p=>{
+        html += `<div class="audit-item"><div class="info small"><strong>${escapeHtml(p.topicTitle)}</strong><div style="margin-top:4px">Comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div></div><div class="goto"><button class="btn visit" data-action="audit-goto" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div></div>`;
+      });
+      html += `<hr style="border-color:rgba(255,255,255,0.04);margin:8px 0">`;
+    }
+    if(!logs || logs.length === 0) html += `<div class="small">Sem registros.</div>`; else html += logs.map(l=> `<div class="small" style="margin-bottom:6px">${escapeHtml(l)}</div>`).join('');
+    panel.innerHTML = html;
+  }
+
+  panel.querySelectorAll('button[data-action="audit-goto"]').forEach(b=>{
+    b.onclick = ()=> {
+      const tid = b.getAttribute('data-topic'); const cid = b.getAttribute('data-cid');
+      showSection('page-kb'); renderTopics();
+      setTimeout(()=> {
+        const el = document.getElementById(`comment-${cid}`);
+        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 3000); }
+      }, 200);
+    };
+  });
 }
 
-function openNewCategory(){
-  const s = session; if(!s) return alert("Faça login.");
-  const role = s.role.toLowerCase(); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
-  const name = prompt("Nome da nova categoria:");
-  if(!name) return;
-  if(categories.includes(name)) return alert("Categoria já existe.");
-  categories.push(name); persist(KEY_CATS, categories); persistAudit(`Categoria "${name}" criada por ${s.username}`); updateCategorySelects(); alert("Categoria criada.");
+/* Login logic with Enter key support */
+function doLogin(){
+  const u = $("loginUser").value.trim();
+  const p = $("loginPass").value;
+  if(!u || !p) return alert("Preencha usuário e senha.");
+  users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
+  const found = users.find(x=> x.username === u && x.password === p);
+  if(!found) return alert("Usuário ou senha inválidos");
+  setSession({ username: found.username, name: found.name, role: found.role, ts: Date.now() });
+  showDashboard();
 }
 
-function openDeleteCategory(){
-  const s = session; if(!s) return alert("Faça login.");
-  const role = s.role.toLowerCase(); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
-  const name = prompt("Nome da categoria a excluir:");
-  if(!name) return;
-  if(!categories.includes(name)) return alert("Categoria não encontrada.");
-  const usedBy = topics.filter(t=> t.category === name).length;
-  let msg = `Deseja excluir a categoria "${name}" do sistema?`;
-  if(usedBy > 0) msg += `\n\n${usedBy} tópico(s) usam essa categoria. Eles ficarão sem categoria.`;
-  if(!confirm(msg)) return;
-  categories = categories.filter(c=> c !== name); topics = topics.map(t => t.category === name ? ({ ...t, category: "" }) : t);
-  persist(KEY_CATS, categories); persist(KEY_TOPICS, topics); persistAudit(`Categoria "${name}" excluída por ${s.username}`); updateCategorySelects(); renderTopics(); alert(`Categoria "${name}" removida.`);
+function doLogout(){
+  clearSession();
+  showLogin();
 }
 
-/* Utilities */
-function renderAll(){
+/* Init and event wiring */
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Attach login handlers
+  $("btnLogin").addEventListener('click', doLogin);
+  $("btnLogout").addEventListener('click', doLogout);
+
+  // Enter key on inputs
+  ["loginUser","loginPass"].forEach(id=>{
+    const el = $(id);
+    if(!el) return;
+    el.addEventListener('keydown', (e)=>{
+      if(e.key === "Enter") doLogin();
+    });
+  });
+
+  // Menu navigation
+  document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      if(item.classList.contains('disabled')) return;
+      const target = item.getAttribute('data-target');
+      showSection(target);
+    });
+  });
+
+  // Search/filter
+  if($("searchAll")) $("searchAll").addEventListener('input', renderTopics);
+  if($("filterCategory")) $("filterCategory").addEventListener('change', renderTopics);
+
+  // New topic/category buttons (open simple prompts)
+  $("btnNewTopic").addEventListener('click', ()=>{
+    const s = getSession(); if(!s) return alert("Faça login.");
+    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
+    const title = prompt("Título do tópico:"); if(!title) return;
+    const content = prompt("Descrição do tópico:") || "";
+    const category = prompt("Categoria (ex: HTML, CSS):") || "";
+    const status = (r === "user") ? "pending" : "approved";
+    const t = { id: idGen(), title, content, category, media: [], comments: [], status };
+    topics.push(t); persistTopics(); persistAudit(`Tópico "${title}" criado por ${s.username} (status: ${status})`);
+    if(status === "pending") notifySupervisorsPending();
+    showSection('page-kb'); renderTopics();
+  });
+
+  $("btnNewCategory").addEventListener('click', ()=>{
+    const s = getSession(); if(!s) return alert("Faça login.");
+    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
+    const name = prompt("Nome da nova categoria:"); if(!name) return;
+    if(categories.includes(name)) return alert("Categoria já existe.");
+    categories.push(name); persistCats(); persistAudit(`Categoria "${name}" criada por ${s.username}`); updateCategorySelects(); alert("Categoria criada.");
+  });
+
+  $("btnDeleteCategoryTop").addEventListener('click', ()=>{
+    const s = getSession(); if(!s) return alert("Faça login.");
+    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
+    const name = prompt("Nome da categoria a excluir:"); if(!name) return;
+    if(!categories.includes(name)) return alert("Categoria não encontrada.");
+    const usedBy = topics.filter(t=> t.category === name).length;
+    if(!confirm(`Excluir categoria "${name}"? ${usedBy} tópico(s) usam essa categoria.`)) return;
+    categories = categories.filter(c=> c !== name); topics = topics.map(t=> t.category === name ? ({ ...t, category: "" }) : t);
+    persistCats(); persistTopics(); persistAudit(`Categoria "${name}" excluída por ${s.username}`); updateCategorySelects(); renderTopics();
+  });
+
+  // User creation
+  $("btnCreateUser").addEventListener('click', ()=>{
+    const s = getSession(); if(!s) return alert("Faça login.");
+    const roleCurrent = normRole(s.role); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
+    const name = $("newName").value.trim(); const username = $("newLogin").value.trim(); const pass = $("newPass").value; let role = $("newRole").value || "User";
+    if(!name || !username || !pass) return alert("Preencha nome, usuário e senha.");
+    users = JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
+    if(users.some(u=> u.username === username)) return alert("Usuário já existe.");
+    if(roleCurrent === "supervisor") role = "User";
+    users.push({ username, password: pass, name, role }); persistUsers(); persistAudit(`Usuário "${username}" criado por ${s.username} com papel ${role}`);
+    $("newName").value = ""; $("newLogin").value = ""; $("newPass").value = ""; renderUsers(); alert(`Usuário "${username}" criado.`);
+  });
+
+  // Initial render
   updateCategorySelects();
-  renderTopics();
-  renderUsers();
-  renderTraining();
-  renderAudit();
-  updatePendingPanel();
-}
+  const sess = getSession();
+  if(sess) showDashboard(); else showLogin();
+  renderAll();
+});
+
+/* Utility renderers */
+function renderAll(){ updateCategorySelects(); renderTopics(); renderUsers(); renderAudit(); renderTraining(); updatePendingPanel(); }
+function checkPendingForSupervisor(){ const sess = getSession(); if(!sess) return; const role = normRole(sess.role); if(role === "admin" || role === "supervisor"){ const pending = getPendingComments(); if(pending.length > 0) showCentralPendingPopup(); } else updatePendingPanel(); }
