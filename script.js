@@ -1,5 +1,6 @@
 /* Don — script.js
-   Updated: search/actions visible only on KB page; buttons wired and functional.
+   Modais para Novo Tópico / Nova Categoria / Excluir Categoria
+   + persistência em localStorage e atualização imediata da UI.
 */
 
 /* Storage keys */
@@ -64,14 +65,10 @@ function showSection(id){
   document.querySelectorAll('.page').forEach(p=>{ p.classList.remove('active'); p.style.display = 'none'; });
   const el = $(id);
   if(el){ el.classList.add('active'); el.style.display = 'block'; }
-  // kbSearchBar is inside page-kb, so no global show/hide needed.
+  if(id === 'page-kb'){ updateCategorySelects(); renderTopics(); }
   if(id === 'page-audit') renderAudit();
   if(id === 'page-training') renderTraining();
   if(id === 'page-user') renderUsers();
-  if(id === 'page-kb') {
-    updateCategorySelects();
-    renderTopics();
-  }
 }
 
 /* Access control */
@@ -103,8 +100,8 @@ function populateNewUserRoleOptions(isAdmin){
 function updateCategorySelects(){
   categories = Array.from(new Set(categories.filter(Boolean)));
   persistCats();
-  const filter = $("filterCategory"), topicCat = $("topicCategory"), deleteSel = $("deleteCategorySelect");
-  [filter, topicCat, deleteSel].forEach(s=>{ if(!s) return; s.innerHTML = `<option value="">Todas as categorias</option>`; categories.forEach(c=> s.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)); });
+  const filter = $("filterCategory"), topicCat = $("topicCategory"), deleteSel = $("deleteCategorySelect"), newTopicCat = $("newTopicCategory");
+  [filter, topicCat, deleteSel, newTopicCat].forEach(s=>{ if(!s) return; s.innerHTML = `<option value="">Todas as categorias</option>`; categories.forEach(c=> s.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)); });
 }
 
 /* Render topics */
@@ -259,36 +256,6 @@ function notifySupervisorsPending(){
   }
 }
 
-function showCentralPendingPopup(){
-  const pending = getPendingComments();
-  if(pending.length === 0) return;
-  const container = $("popupContainer"); container.innerHTML = "";
-  const overlay = document.createElement('div'); overlay.className = 'popup-overlay';
-  const box = document.createElement('div'); box.className = 'popup-box';
-  box.innerHTML = `<h3>Existem ${pending.length} comentários pendentes</h3><div id="centralPendingList" style="margin-top:10px"></div><div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn ghost" id="centralClose">Fechar</button></div>`;
-  overlay.appendChild(box); container.appendChild(overlay);
-  const list = box.querySelector('#centralPendingList');
-  pending.slice(0,8).forEach(p=>{
-    const item = document.createElement('div'); item.style.marginTop='8px';
-    item.innerHTML = `<div class="small"><strong>${escapeHtml(p.topicTitle)}</strong> — comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div><div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end"><button class="btn visit" data-action="goto-pending" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div>`;
-    list.appendChild(item);
-  });
-  box.querySelectorAll('button[data-action="goto-pending"]').forEach(b=>{
-    b.onclick = ()=> {
-      const tid = b.getAttribute('data-topic'); const cid = b.getAttribute('data-cid');
-      closeCentralPopup();
-      showSection('page-kb'); renderTopics();
-      setTimeout(()=> {
-        const el = document.getElementById(`comment-${cid}`);
-        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 3000); }
-      }, 200);
-    };
-  });
-  $("centralClose").onclick = ()=> closeCentralPopup();
-}
-
-function closeCentralPopup(){ $("popupContainer").innerHTML = ""; }
-
 /* Training */
 function renderTraining(){
   const sess = getSession();
@@ -432,6 +399,161 @@ function doLogout(){
   showLogin();
 }
 
+/* Modal helpers */
+function openModal(htmlContent){
+  const overlay = $("modalOverlay");
+  const box = $("modalBox");
+  box.innerHTML = htmlContent;
+  overlay.style.display = 'flex';
+  overlay.setAttribute('aria-hidden','false');
+  // attach close buttons
+  const closeBtn = box.querySelector('[data-modal-close]');
+  if(closeBtn) closeBtn.onclick = closeModal;
+}
+function closeModal(){
+  const overlay = $("modalOverlay");
+  const box = $("modalBox");
+  box.innerHTML = "";
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden','true');
+}
+
+/* KB action modals */
+function showNewTopicModal(){
+  const sess = getSession(); if(!sess) return alert("Faça login.");
+  const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
+  updateCategorySelects();
+  const html = `
+    <div class="modal-header"><strong>Novo Tópico</strong><button class="btn ghost" data-modal-close>Fechar</button></div>
+    <div>
+      <label class="small">Título</label>
+      <input id="modalTopicTitle" type="text">
+      <label class="small">Descrição</label>
+      <textarea id="modalTopicContent" rows="4"></textarea>
+      <label class="small">Categoria</label>
+      <select id="newTopicCategory"><option value="">Selecione</option></select>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="modalNewCategoryName" type="text" placeholder="Criar nova categoria (opcional)">
+        <button class="btn" id="modalCreateCategoryBtn">Criar</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="modalSaveTopic">Salvar</button>
+        <button class="btn ghost" data-modal-close>Cancelar</button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+  // populate categories
+  updateCategorySelects();
+  // handlers
+  $("modalCreateCategoryBtn").onclick = ()=>{
+    const name = $("modalNewCategoryName").value.trim();
+    if(!name) return alert("Digite o nome da categoria.");
+    if(categories.includes(name)) return alert("Categoria já existe.");
+    categories.push(name); persistCats(); updateCategorySelects();
+    alert("Categoria criada.");
+    $("modalNewCategoryName").value = "";
+  };
+  $("modalSaveTopic").onclick = ()=>{
+    const title = $("modalTopicTitle").value.trim();
+    const content = $("modalTopicContent").value.trim();
+    const category = $("newTopicCategory").value || "";
+    if(!title) return alert("Título obrigatório.");
+    const t = { id: idGen(), title, content, category, media: [], comments: [], status: "approved" };
+    topics.push(t); persistTopics(); persistAudit(`Tópico "${title}" criado por ${sess.username}`);
+    closeModal(); showSection('page-kb'); renderTopics();
+  };
+}
+
+function showNewCategoryModal(){
+  const sess = getSession(); if(!sess) return alert("Faça login.");
+  const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
+  const html = `
+    <div class="modal-header"><strong>Nova Categoria</strong><button class="btn ghost" data-modal-close>Fechar</button></div>
+    <div>
+      <label class="small">Nome da categoria</label>
+      <input id="modalCategoryName" type="text">
+      <div class="modal-actions">
+        <button class="btn" id="modalSaveCategory">Criar</button>
+        <button class="btn ghost" data-modal-close>Cancelar</button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+  $("modalSaveCategory").onclick = ()=>{
+    const name = $("modalCategoryName").value.trim();
+    if(!name) return alert("Digite o nome da categoria.");
+    if(categories.includes(name)) return alert("Categoria já existe.");
+    categories.push(name); persistCats(); persistAudit(`Categoria "${name}" criada por ${sess.username}`); updateCategorySelects();
+    closeModal(); alert("Categoria criada.");
+  };
+}
+
+function showDeleteCategoryModal(){
+  const sess = getSession(); if(!sess) return alert("Faça login.");
+  const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
+  updateCategorySelects();
+  const html = `
+    <div class="modal-header"><strong>Excluir Categoria</strong><button class="btn ghost" data-modal-close>Fechar</button></div>
+    <div>
+      <label class="small">Selecione a categoria a excluir</label>
+      <select id="deleteCategorySelect"><option value="">Selecione</option></select>
+      <div class="modal-actions">
+        <button class="btn warn" id="modalDeleteCategory">Excluir</button>
+        <button class="btn ghost" data-modal-close>Cancelar</button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+  updateCategorySelects();
+  $("modalDeleteCategory").onclick = ()=>{
+    const name = $("deleteCategorySelect").value;
+    if(!name) return alert("Selecione uma categoria.");
+    const usedBy = topics.filter(t=> t.category === name).length;
+    if(!confirm(`Excluir categoria "${name}"? ${usedBy} tópico(s) usam essa categoria.`)) return;
+    categories = categories.filter(c=> c !== name);
+    topics = topics.map(t=> t.category === name ? ({ ...t, category: "" }) : t);
+    persistCats(); persistTopics(); persistAudit(`Categoria "${name}" excluída por ${sess.username}`);
+    closeModal(); updateCategorySelects(); renderTopics(); alert("Categoria excluída.");
+  };
+}
+
+/* Robust menu wiring + delegated fallback */
+(function(){
+  function attachMenuHandlers(){
+    const items = document.querySelectorAll('.top-menu .menu-item');
+    items.forEach(item=>{
+      const clone = item.cloneNode(true);
+      item.parentNode.replaceChild(clone, item);
+    });
+    const fresh = document.querySelectorAll('.top-menu .menu-item');
+    fresh.forEach(item=>{
+      item.addEventListener('click', function(e){
+        if(item.classList.contains('disabled')) return;
+        const target = item.getAttribute('data-target');
+        if(!target) return;
+        try { showSection(target); } catch(err){ console.error('Erro ao chamar showSection:', err); }
+      });
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    const el = e.target.closest && e.target.closest('.menu-item');
+    if(!el) return;
+    if(el.classList.contains('disabled')) return;
+    const target = el.getAttribute('data-target');
+    if(target) {
+      try { showSection(target); } catch(err){ console.error('Erro no delegated showSection:', err); }
+    }
+  });
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', attachMenuHandlers);
+  } else {
+    attachMenuHandlers();
+  }
+})();
+
 /* Init and event wiring */
 document.addEventListener('DOMContentLoaded', ()=>{
   // Login handlers
@@ -460,38 +582,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if($("searchAll")) $("searchAll").addEventListener('input', renderTopics);
   if($("filterCategory")) $("filterCategory").addEventListener('change', renderTopics);
 
-  // KB action buttons (wired explicitly)
-  if($("btnNewTopic")) $("btnNewTopic").addEventListener('click', ()=>{
-    const s = getSession(); if(!s) return alert("Faça login.");
-    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
-    const title = prompt("Título do tópico:"); if(!title) return;
-    const content = prompt("Descrição do tópico:") || "";
-    const category = prompt("Categoria (ex: HTML, CSS):") || "";
-    const status = (r === "user") ? "pending" : "approved";
-    const t = { id: idGen(), title, content, category, media: [], comments: [], status };
-    topics.push(t); persistTopics(); persistAudit(`Tópico "${title}" criado por ${s.username} (status: ${status})`);
-    if(status === "pending") notifySupervisorsPending();
-    showSection('page-kb'); renderTopics();
-  });
-
-  if($("btnNewCategory")) $("btnNewCategory").addEventListener('click', ()=>{
-    const s = getSession(); if(!s) return alert("Faça login.");
-    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
-    const name = prompt("Nome da nova categoria:"); if(!name) return;
-    if(categories.includes(name)) return alert("Categoria já existe.");
-    categories.push(name); persistCats(); persistAudit(`Categoria "${name}" criada por ${s.username}`); updateCategorySelects(); alert("Categoria criada.");
-  });
-
-  if($("btnDeleteCategoryTop")) $("btnDeleteCategoryTop").addEventListener('click', ()=>{
-    const s = getSession(); if(!s) return alert("Faça login.");
-    const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
-    const name = prompt("Nome da categoria a excluir:"); if(!name) return;
-    if(!categories.includes(name)) return alert("Categoria não encontrada.");
-    const usedBy = topics.filter(t=> t.category === name).length;
-    if(!confirm(`Excluir categoria "${name}"? ${usedBy} tópico(s) usam essa categoria.`)) return;
-    categories = categories.filter(c=> c !== name); topics = topics.map(t=> t.category === name ? ({ ...t, category: "" }) : t);
-    persistCats(); persistTopics(); persistAudit(`Categoria "${name}" excluída por ${s.username}`); updateCategorySelects(); renderTopics();
-  });
+  // KB action buttons open modais
+  if($("btnNewTopic")) $("btnNewTopic").addEventListener('click', showNewTopicModal);
+  if($("btnNewCategory")) $("btnNewCategory").addEventListener('click', showNewCategoryModal);
+  if($("btnDeleteCategoryTop")) $("btnDeleteCategoryTop").addEventListener('click', showDeleteCategoryModal);
 
   // User creation
   if($("btnCreateUser")) $("btnCreateUser").addEventListener('click', ()=>{
@@ -504,6 +598,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(roleCurrent === "supervisor") role = "User";
     users.push({ username, password: pass, name, role }); persistUsers(); persistAudit(`Usuário "${username}" criado por ${s.username} com papel ${role}`);
     $("newName").value = ""; $("newLogin").value = ""; $("newPass").value = ""; renderUsers(); alert(`Usuário "${username}" criado.`);
+  });
+
+  // Modal close by overlay click
+  $("modalOverlay").addEventListener('click', function(e){
+    if(e.target === this) closeModal();
   });
 
   // Initial render
