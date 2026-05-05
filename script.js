@@ -1,7 +1,9 @@
 /* Don — script.js
-   Login with Enter key, dashboard rendering, approvals, localStorage persistence.
+   Login with Enter key, dashboard rendering, approvals, localStorage persistence,
+   robust menu wiring and delegated handlers to avoid missing clicks.
 */
 
+/* Storage keys */
 const KEY_TOPICS = "don_topics_full";
 const KEY_CATS = "don_categories_full";
 const KEY_USERS = "don_users_full";
@@ -9,10 +11,12 @@ const KEY_AUDIT = "don_audit_full";
 const KEY_TRAIN = "don_training_files";
 const KEY_SESSION = "don_session_full";
 
+/* Utilities */
 function idGen(){ return 'id_' + Math.random().toString(36).slice(2,9); }
 function $(id){ return document.getElementById(id); }
 function escapeHtml(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
 
+/* Seed / persistence */
 let users = JSON.parse(localStorage.getItem(KEY_USERS) || "null") || [
   { username: "admin", password: "admin", name: "Administrador", role: "Admin" },
   { username: "supervisor", password: "supervisor", name: "Supervisor Exemplo", role: "Supervisor" },
@@ -74,15 +78,16 @@ function normRole(r){ return (r||"").toString().trim().toLowerCase(); }
 function configureAccess(){
   const s = getSession(); const role = s ? normRole(s.role) : "";
   document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
-    if(item.getAttribute('data-target') === 'page-user' || item.getAttribute('data-target') === 'page-audit'){
+    const target = item.getAttribute('data-target');
+    if(target === 'page-user' || target === 'page-audit'){
       if(role === "admin" || role === "supervisor"){ item.classList.remove('disabled'); item.removeAttribute('aria-disabled'); }
       else { item.classList.add('disabled'); item.setAttribute('aria-disabled','true'); }
     }
   });
   const canManage = (role === "admin" || role === "supervisor");
-  $("btnNewTopic").style.display = canManage ? 'inline-flex' : 'none';
-  $("btnNewCategory").style.display = canManage ? 'inline-flex' : 'none';
-  $("btnDeleteCategoryTop").style.display = canManage ? 'inline-flex' : 'none';
+  if($("btnNewTopic")) $("btnNewTopic").style.display = canManage ? 'inline-flex' : 'none';
+  if($("btnNewCategory")) $("btnNewCategory").style.display = canManage ? 'inline-flex' : 'none';
+  if($("btnDeleteCategoryTop")) $("btnDeleteCategoryTop").style.display = canManage ? 'inline-flex' : 'none';
   populateNewUserRoleOptions(role === "admin");
 }
 
@@ -426,11 +431,55 @@ function doLogout(){
   showLogin();
 }
 
+/* Robust menu wiring + delegated fallback */
+(function(){
+  function attachMenuHandlers(){
+    const items = document.querySelectorAll('.top-menu .menu-item');
+    items.forEach(item=>{
+      // remove previous listeners by cloning
+      const clone = item.cloneNode(true);
+      item.parentNode.replaceChild(clone, item);
+    });
+    const fresh = document.querySelectorAll('.top-menu .menu-item');
+    fresh.forEach(item=>{
+      item.addEventListener('click', function(e){
+        if(item.classList.contains('disabled')) return;
+        const target = item.getAttribute('data-target');
+        if(!target) return;
+        try { showSection(target); } catch(err){ console.error('Erro ao chamar showSection:', err); }
+      });
+    });
+  }
+
+  // Delegation fallback
+  document.addEventListener('click', function(e){
+    const el = e.target.closest && e.target.closest('.menu-item');
+    if(!el) return;
+    if(el.classList.contains('disabled')) return;
+    const target = el.getAttribute('data-target');
+    if(target) {
+      try { showSection(target); } catch(err){ console.error('Erro no delegated showSection:', err); }
+    }
+  });
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', attachMenuHandlers);
+  } else {
+    attachMenuHandlers();
+  }
+
+  setTimeout(function(){
+    if(typeof showSection !== 'function'){
+      console.error('Função showSection não encontrada. Verifique se script.js foi carregado corretamente.');
+    }
+  }, 300);
+})();
+
 /* Init and event wiring */
 document.addEventListener('DOMContentLoaded', ()=>{
   // Attach login handlers
-  $("btnLogin").addEventListener('click', doLogin);
-  $("btnLogout").addEventListener('click', doLogout);
+  if($("btnLogin")) $("btnLogin").addEventListener('click', doLogin);
+  if($("btnLogout")) $("btnLogout").addEventListener('click', doLogout);
 
   // Enter key on inputs
   ["loginUser","loginPass"].forEach(id=>{
@@ -441,21 +490,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   });
 
-  // Menu navigation
-  document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
-    item.addEventListener('click', ()=>{
-      if(item.classList.contains('disabled')) return;
-      const target = item.getAttribute('data-target');
-      showSection(target);
-    });
-  });
-
+  // Menu navigation (already wired by robust handler)
   // Search/filter
   if($("searchAll")) $("searchAll").addEventListener('input', renderTopics);
   if($("filterCategory")) $("filterCategory").addEventListener('change', renderTopics);
 
-  // New topic/category buttons (open simple prompts)
-  $("btnNewTopic").addEventListener('click', ()=>{
+  // New topic/category buttons
+  if($("btnNewTopic")) $("btnNewTopic").addEventListener('click', ()=>{
     const s = getSession(); if(!s) return alert("Faça login.");
     const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
     const title = prompt("Título do tópico:"); if(!title) return;
@@ -468,7 +509,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     showSection('page-kb'); renderTopics();
   });
 
-  $("btnNewCategory").addEventListener('click', ()=>{
+  if($("btnNewCategory")) $("btnNewCategory").addEventListener('click', ()=>{
     const s = getSession(); if(!s) return alert("Faça login.");
     const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
     const name = prompt("Nome da nova categoria:"); if(!name) return;
@@ -476,7 +517,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     categories.push(name); persistCats(); persistAudit(`Categoria "${name}" criada por ${s.username}`); updateCategorySelects(); alert("Categoria criada.");
   });
 
-  $("btnDeleteCategoryTop").addEventListener('click', ()=>{
+  if($("btnDeleteCategoryTop")) $("btnDeleteCategoryTop").addEventListener('click', ()=>{
     const s = getSession(); if(!s) return alert("Faça login.");
     const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
     const name = prompt("Nome da categoria a excluir:"); if(!name) return;
@@ -488,7 +529,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // User creation
-  $("btnCreateUser").addEventListener('click', ()=>{
+  if($("btnCreateUser")) $("btnCreateUser").addEventListener('click', ()=>{
     const s = getSession(); if(!s) return alert("Faça login.");
     const roleCurrent = normRole(s.role); if(roleCurrent !== "admin" && roleCurrent !== "supervisor") return alert("Acesso negado.");
     const name = $("newName").value.trim(); const username = $("newLogin").value.trim(); const pass = $("newPass").value; let role = $("newRole").value || "User";
