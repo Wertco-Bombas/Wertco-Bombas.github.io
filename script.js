@@ -12,6 +12,39 @@ let topics=[
 ];
 let audit=[]; let trainingFiles=[];
 
+/* Login */
+function doLogin(){
+  let u=document.getElementById("loginUser").value.trim();
+  let p=document.getElementById("loginPass").value;
+  let found=users.find(x=>x.username===u && x.password===p);
+  if(!found){alert("Usuário ou senha inválidos");return;}
+  session=found;
+  document.getElementById("loginScreen").style.display="none";
+  document.getElementById("dashboard").style.display="block";
+  document.getElementById("headerUser").style.display="flex";
+  document.getElementById("headerName").innerText=found.username;
+  document.getElementById("headerRole").innerText=`(${found.role})`;
+  renderTopics();renderUsers();renderTraining();renderAudit();
+}
+document.getElementById("btnLogin").onclick=doLogin;
+/* Enter para logar */
+["loginUser","loginPass"].forEach(id=>{
+  document.getElementById(id).addEventListener("keypress",e=>{
+    if(e.key==="Enter"){doLogin();}
+  });
+});
+document.getElementById("btnLogout").onclick=()=>{
+  session=null;
+  document.getElementById("dashboard").style.display="none";
+  document.getElementById("loginScreen").style.display="block";
+};
+
+/* Navegação */
+document.querySelectorAll('.menu-item').forEach(item=>{
+  item.addEventListener('click',()=>{
+    showSection(item.getAttribute('data-target'));
+  });
+});
 function showSection(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -21,6 +54,7 @@ function showSection(id){
   if(id==="page-user") renderUsers();
 }
 
+/* Renderizações */
 function renderTopics(){
   let container=document.getElementById("topicsList");
   container.innerHTML="";
@@ -28,33 +62,4 @@ function renderTopics(){
     let div=document.createElement("div");
     div.className="topic";
     div.innerHTML=`<h3 style="color:var(--accent)">${t.title}</h3><p>${t.content}</p>`;
-    t.comments.forEach(c=>{
-      div.innerHTML+=`<div class="status-pill status-${c.status}">${c.status}</div>`;
-      if(session && (session.role==="Admin"||session.role==="Supervisor") && c.status==="pending"){
-        div.innerHTML+=`<button class="btn visit" onclick="approve('${t.id}','${c.id}')">Aprovar</button>
-                        <button class="btn warn" onclick="reject('${t.id}','${c.id}')">Rejeitar</button>`;
-      }
-    });
-    container.appendChild(div);
-  });
-}
-function approve(tid,cid){
-  let t=topics.find(x=>x.id===tid);
-  if(t){let c=t.comments.find(c=>c.id===cid);if(c) c.status="approved";}
-  audit.unshift(`${cid} aprovado`);
-  renderTopics();renderAudit();
-}
-function reject(tid,cid){
-  let t=topics.find(x=>x.id===tid);
-  if(t){let c=t.comments.find(c=>c.id===cid);if(c) c.status="rejected";}
-  audit.unshift(`${cid} rejeitado`);
-  renderTopics();renderAudit();
-}
-function renderAudit(){
-  document.getElementById("auditLog").innerHTML=audit.map(a=>`<div>${a}</div>`).join("");
-}
-function renderTraining(){
-  document.getElementById("trainingUpload").innerHTML=`<input type="file" id="trainFile" multiple accept=".pdf,.doc,.docx,video/*"><button class="btn" onclick="saveTraining()">Enviar</button>`;
-  document.getElementById("trainingFiles").innerHTML=trainingFiles.map(f=>`<div>${f}</div>`).join("");
-}
-function
+    t.comments.forEach
