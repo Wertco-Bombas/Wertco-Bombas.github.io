@@ -1,6 +1,5 @@
 /* Don — script.js
-   Login with Enter key, dashboard rendering, approvals, localStorage persistence,
-   robust menu wiring and delegated handlers to avoid missing clicks.
+   Updated: search/actions visible only on KB page; buttons wired and functional.
 */
 
 /* Storage keys */
@@ -65,12 +64,14 @@ function showSection(id){
   document.querySelectorAll('.page').forEach(p=>{ p.classList.remove('active'); p.style.display = 'none'; });
   const el = $(id);
   if(el){ el.classList.add('active'); el.style.display = 'block'; }
-  const kbBar = $("kbSearchBar");
-  if(id === 'page-kb'){ kbBar.style.display = 'flex'; updateCategorySelects(); renderTopics(); }
-  else kbBar.style.display = 'none';
+  // kbSearchBar is inside page-kb, so no global show/hide needed.
   if(id === 'page-audit') renderAudit();
   if(id === 'page-training') renderTraining();
   if(id === 'page-user') renderUsers();
+  if(id === 'page-kb') {
+    updateCategorySelects();
+    renderTopics();
+  }
 }
 
 /* Access control */
@@ -431,53 +432,9 @@ function doLogout(){
   showLogin();
 }
 
-/* Robust menu wiring + delegated fallback */
-(function(){
-  function attachMenuHandlers(){
-    const items = document.querySelectorAll('.top-menu .menu-item');
-    items.forEach(item=>{
-      // remove previous listeners by cloning
-      const clone = item.cloneNode(true);
-      item.parentNode.replaceChild(clone, item);
-    });
-    const fresh = document.querySelectorAll('.top-menu .menu-item');
-    fresh.forEach(item=>{
-      item.addEventListener('click', function(e){
-        if(item.classList.contains('disabled')) return;
-        const target = item.getAttribute('data-target');
-        if(!target) return;
-        try { showSection(target); } catch(err){ console.error('Erro ao chamar showSection:', err); }
-      });
-    });
-  }
-
-  // Delegation fallback
-  document.addEventListener('click', function(e){
-    const el = e.target.closest && e.target.closest('.menu-item');
-    if(!el) return;
-    if(el.classList.contains('disabled')) return;
-    const target = el.getAttribute('data-target');
-    if(target) {
-      try { showSection(target); } catch(err){ console.error('Erro no delegated showSection:', err); }
-    }
-  });
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', attachMenuHandlers);
-  } else {
-    attachMenuHandlers();
-  }
-
-  setTimeout(function(){
-    if(typeof showSection !== 'function'){
-      console.error('Função showSection não encontrada. Verifique se script.js foi carregado corretamente.');
-    }
-  }, 300);
-})();
-
 /* Init and event wiring */
 document.addEventListener('DOMContentLoaded', ()=>{
-  // Attach login handlers
+  // Login handlers
   if($("btnLogin")) $("btnLogin").addEventListener('click', doLogin);
   if($("btnLogout")) $("btnLogout").addEventListener('click', doLogout);
 
@@ -490,12 +447,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   });
 
-  // Menu navigation (already wired by robust handler)
-  // Search/filter
+  // Menu navigation (delegated)
+  document.querySelectorAll('.top-menu .menu-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      if(item.classList.contains('disabled')) return;
+      const target = item.getAttribute('data-target');
+      if(target) showSection(target);
+    });
+  });
+
+  // Search/filter (only active when KB visible)
   if($("searchAll")) $("searchAll").addEventListener('input', renderTopics);
   if($("filterCategory")) $("filterCategory").addEventListener('change', renderTopics);
 
-  // New topic/category buttons
+  // KB action buttons (wired explicitly)
   if($("btnNewTopic")) $("btnNewTopic").addEventListener('click', ()=>{
     const s = getSession(); if(!s) return alert("Faça login.");
     const r = normRole(s.role); if(r !== "admin" && r !== "supervisor") return alert("Acesso negado.");
