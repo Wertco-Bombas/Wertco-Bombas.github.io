@@ -1,6 +1,6 @@
 /* Don — script.js
-   Modais para Novo Tópico / Nova Categoria / Excluir Categoria
-   + persistência em localStorage e atualização imediata da UI.
+   Ajustes: audit "Ir" alinhado à direita; pending popup não aparece na tela de login;
+   modais para KB; Enter para login; persistência em localStorage.
 */
 
 /* Storage keys */
@@ -49,8 +49,26 @@ function setSession(s){ localStorage.setItem(KEY_SESSION, JSON.stringify(s)); }
 function clearSession(){ localStorage.removeItem(KEY_SESSION); }
 
 /* UI helpers */
-function showLogin(){ $("loginScreen").style.display = "block"; $("dashboard").style.display = "none"; $("headerUser").style.display = "none"; }
-function showDashboard(){ $("loginScreen").style.display = "none"; $("dashboard").style.display = "block"; $("headerUser").style.display = "flex"; updateHeader(); configureAccess(); showSection('page-kb'); renderAll(); checkPendingForSupervisor(); }
+function showLogin(){
+  $("loginScreen").style.display = "block";
+  $("dashboard").style.display = "none";
+  $("headerUser").style.display = "none";
+  // hide pending UI and popups while on login
+  $("pendingPanel").style.display = "none";
+  $("popupContainer").innerHTML = "";
+  $("modalOverlay").style.display = "none";
+  $("modalBox").innerHTML = "";
+}
+function showDashboard(){
+  $("loginScreen").style.display = "none";
+  $("dashboard").style.display = "block";
+  $("headerUser").style.display = "flex";
+  updateHeader();
+  configureAccess();
+  showSection('page-kb');
+  renderAll();
+  checkPendingForSupervisor();
+}
 
 function updateHeader(){
   const s = getSession();
@@ -222,6 +240,10 @@ function getPendingComments(){
 }
 
 function updatePendingPanel(){
+  // only show pending panel when dashboard is visible and user logged in
+  const sess = getSession();
+  if(!sess || $("dashboard").style.display === "none"){ $("pendingPanel").style.display = 'none'; return; }
+
   const pending = getPendingComments();
   const panel = $("pendingPanel");
   const list = $("pendingList");
@@ -255,6 +277,39 @@ function notifySupervisorsPending(){
     updatePendingPanel();
   }
 }
+
+function showCentralPendingPopup(){
+  // only show central popup when dashboard visible and user logged in
+  const sess = getSession();
+  if(!sess || $("dashboard").style.display === "none") return;
+  const pending = getPendingComments();
+  if(pending.length === 0) return;
+  const container = $("popupContainer"); container.innerHTML = "";
+  const overlay = document.createElement('div'); overlay.className = 'popup-overlay';
+  const box = document.createElement('div'); box.className = 'popup-box';
+  box.innerHTML = `<h3>Existem ${pending.length} comentários pendentes</h3><div id="centralPendingList" style="margin-top:10px"></div><div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn ghost" id="centralClose">Fechar</button></div>`;
+  overlay.appendChild(box); container.appendChild(overlay);
+  const list = box.querySelector('#centralPendingList');
+  pending.slice(0,8).forEach(p=>{
+    const item = document.createElement('div'); item.style.marginTop='8px';
+    item.innerHTML = `<div class="small"><strong>${escapeHtml(p.topicTitle)}</strong> — comentário ${escapeHtml(p.commentId)} por ${escapeHtml(p.author)}</div><div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end"><button class="btn visit" data-action="goto-pending" data-topic="${p.topicId}" data-cid="${p.commentId}">Ir</button></div>`;
+    list.appendChild(item);
+  });
+  box.querySelectorAll('button[data-action="goto-pending"]').forEach(b=>{
+    b.onclick = ()=> {
+      const tid = b.getAttribute('data-topic'); const cid = b.getAttribute('data-cid');
+      closeCentralPopup();
+      showSection('page-kb'); renderTopics();
+      setTimeout(()=> {
+        const el = document.getElementById(`comment-${cid}`);
+        if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('highlight'); setTimeout(()=> el.classList.remove('highlight'), 3000); }
+      }, 200);
+    };
+  });
+  $("centralClose").onclick = ()=> closeCentralPopup();
+}
+
+function closeCentralPopup(){ $("popupContainer").innerHTML = ""; }
 
 /* Training */
 function renderTraining(){
@@ -406,7 +461,6 @@ function openModal(htmlContent){
   box.innerHTML = htmlContent;
   overlay.style.display = 'flex';
   overlay.setAttribute('aria-hidden','false');
-  // attach close buttons
   const closeBtn = box.querySelector('[data-modal-close]');
   if(closeBtn) closeBtn.onclick = closeModal;
 }
@@ -418,7 +472,7 @@ function closeModal(){
   overlay.setAttribute('aria-hidden','true');
 }
 
-/* KB action modals */
+/* KB action modals (same as before) */
 function showNewTopicModal(){
   const sess = getSession(); if(!sess) return alert("Faça login.");
   const role = normRole(sess.role); if(role !== "admin" && role !== "supervisor") return alert("Acesso negado.");
@@ -443,9 +497,7 @@ function showNewTopicModal(){
     </div>
   `;
   openModal(html);
-  // populate categories
   updateCategorySelects();
-  // handlers
   $("modalCreateCategoryBtn").onclick = ()=>{
     const name = $("modalNewCategoryName").value.trim();
     if(!name) return alert("Digite o nome da categoria.");
