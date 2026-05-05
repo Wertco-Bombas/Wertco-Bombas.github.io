@@ -1,0 +1,19 @@
+:root{
+  --bg:#070707; --card:#0f0f0f; --text:#f7f7f7;
+  --accent:#ffd400; --accent-contrast:#0b0b0b;
+  --danger:#ff5c33; --pending:#ffb84d;
+  --approved:#34d399; --rejected:#ff6b6b;
+}
+body{margin:0;font-family:Arial,sans-serif;background:#0b0b0b;color:var(--text)}
+h1{color:var(--accent)}
+.page{display:none}
+.page.active{display:block}
+.card{background:var(--card);padding:16px;border-radius:12px}
+.btn{padding:8px 12px;border:none;border-radius:8px;font-weight:700;cursor:pointer}
+.btn.visit{background:var(--accent);color:var(--accent-contrast)}
+.btn.warn{background:var(--danger);color:#fff}
+.topic{background:#111;padding:12px;border-radius:8px;margin-bottom:10px}
+.status-pill{padding:4px 8px;border-radius:999px;font-size:0.8rem;font-weight:700}
+.status-pending{background:var(--pending);color:#111}
+.status-approved{background:var(--approved);color:#042014}
+.status-rejected{background:var(--rejected);color:#2b0500}
