@@ -1,21 +1,30 @@
-import { hash } from "bcryptjs";
-import { Pool } from "pg";
+// pages/api/register.js
+import { createClient } from '@supabase/supabase-js';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método não permitido' });
+  }
 
-  const { username, password, role } = req.body;
+  const { username, password } = req.body;
+
   try {
-    const passwordHash = await hash(password, 10);
-    await pool.query(
-      "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)",
-      [username, passwordHash, role || "User"]
-    );
-    res.json({ ok: true });
+    // Insere novo usuário na tabela "users"
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{ username, password }]);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ ok: true, user: data });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao registrar usuário" });
+    return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 }
