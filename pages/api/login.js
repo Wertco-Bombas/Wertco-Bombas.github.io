@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       .from('users')
       .select('*')
       .eq('username', username)
-      .eq('password_hash', password) // <-- aqui está a mudança
+      .eq('password_hash', password) // <-- usa a coluna correta
       .single();
 
     if (error) {
