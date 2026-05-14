@@ -1,7 +1,6 @@
 // pages/api/login.js
 import { createClient } from '@supabase/supabase-js';
 
-// Cria o cliente Supabase usando variáveis de ambiente
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
@@ -15,12 +14,12 @@ export default async function handler(req, res) {
   const { username, password } = req.body;
 
   try {
-    // Busca o usuário na tabela "users"
+    // Busca o usuário na tabela "users" usando password_hash
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('username', username)
-      .eq('password', password)
+      .eq('password_hash', password) // <-- aqui está a mudança
       .single();
 
     if (error) {
