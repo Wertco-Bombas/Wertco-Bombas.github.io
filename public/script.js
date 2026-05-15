@@ -31,9 +31,11 @@ function showDashboard(){
 }
 
 /* =========================
-   LOGIN (ROBUSTO)
+   LOGIN CORRIGIDO
 ========================= */
-async function doLogin(){
+async function doLogin(e){
+
+  if(e) e.preventDefault(); // 🔥 ESSENCIAL
 
   const u = $("loginUser")?.value?.trim();
   const p = $("loginPass")?.value;
@@ -50,7 +52,10 @@ async function doLogin(){
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ username: u, password: p })
+      body: JSON.stringify({
+        username: u,
+        password: p
+      })
     });
 
     const data = await res.json();
@@ -71,7 +76,7 @@ async function doLogin(){
 
   } catch (err) {
     console.error("Erro login:", err);
-    alert("Erro de conexão com servidor");
+    alert("Erro de conexão com servidor (/api/login não encontrada ou falhou)");
   }
 }
 
@@ -88,18 +93,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const btn = $("btnLogin");
   const logout = $("btnLogout");
+  const form = $("loginForm");
 
+  // clique botão
   if(btn) btn.addEventListener('click', doLogin);
-  if(logout) logout.addEventListener('click', doLogout);
 
-  ["loginUser","loginPass"].forEach(id=>{
-    const el = $(id);
-    if(el){
-      el.addEventListener('keydown', (e)=>{
-        if(e.key === "Enter") doLogin();
-      });
-    }
-  });
+  // submit form (ENTER FUNCIONA AQUI AGORA)
+  if(form) form.addEventListener('submit', doLogin);
+
+  if(logout) logout.addEventListener('click', doLogout);
 
   const sess = getSession();
   if(sess) showDashboard();
