@@ -1,5 +1,5 @@
-export default async function handler(req, res) {
+export default function handler(req, res) {
   return res.status(200).json({
-    body: req.body
+    debug: "VERSÃO DO GITHUB ATUALIZOU"
   });
 }
