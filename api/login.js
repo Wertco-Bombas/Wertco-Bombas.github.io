@@ -5,7 +5,8 @@ export default function handler(req, res) {
 
   const { username, password } = req.body;
 
-  if (username === "admin" && password === "123") {
+  // LOGIN MOCK (teste)
+  if (username === "admin" && password === "admin") {
     return res.status(200).json({
       user: {
         username: "admin",
@@ -14,5 +15,7 @@ export default function handler(req, res) {
     });
   }
 
-  return res.status(401).json({ error: "Usuário ou senha inválidos" });
+  return res.status(401).json({
+    error: "Usuário ou senha inválidos"
+  });
 }
