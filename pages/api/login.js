@@ -15,20 +15,24 @@ export default async function handler(req, res) {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('username', username)
-    .maybeSingle();
+    .eq('username', username);
 
   if (error) {
     return res.status(400).json({ error: error.message });
   }
 
-  if (!data) {
+  if (!data || data.length === 0) {
     return res.status(401).json({ error: 'Usuário não encontrado' });
   }
 
-  if (data.password_hash !== password) {
+  const user = data[0];
+
+  if (user.password_hash !== password) {
     return res.status(401).json({ error: 'Senha inválida' });
   }
 
-  return res.status(200).json({ ok: true, user: data });
+  return res.status(200).json({
+    ok: true,
+    user
+  });
 }
