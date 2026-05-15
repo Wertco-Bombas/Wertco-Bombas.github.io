@@ -14,10 +14,10 @@ export default async function handler(req, res) {
   const { username, password } = req.body;
 
   try {
-    // Insere novo usuário na tabela "users"
     const { data, error } = await supabase
       .from('users')
-      .insert([{ username, password_hash: password, role: 'user' }]);
+      .insert([{ username, password_hash: password, role: 'user' }])
+      .select();
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -25,6 +25,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, user: data });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro interno no servidor' });
+    return res.status(500).json({ error: 'Erro ao registrar usuário' });
   }
 }
