@@ -14,7 +14,6 @@ export default async function handler(req, res) {
   const { username, password } = req.body;
 
   try {
-    // Busca o usuário na tabela "users" usando password_hash
     const { data, error } = await supabase
       .from('users')
       .select('*')
