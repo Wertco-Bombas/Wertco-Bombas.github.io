@@ -11,29 +11,35 @@ export default async function handler(req, res) {
   }
 
   const { username, password } = req.body;
-  console.log("BODY RECEBIDO:", req.body);
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username e password são obrigatórios' });
+  }
 
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('username', username);
+    .eq('username', username)
+    .maybeSingle();
 
   if (error) {
     return res.status(400).json({ error: error.message });
   }
 
-  if (!data || data.length === 0) {
+  if (!data) {
     return res.status(401).json({ error: 'Usuário não encontrado' });
   }
 
-  const user = data[0];
-
-  if (user.password_hash !== password) {
+  if (data.password_hash !== password) {
     return res.status(401).json({ error: 'Senha inválida' });
   }
 
   return res.status(200).json({
     ok: true,
-    user
+    user: {
+      id: data.id,
+      username: data.username,
+      role: data.role
+    }
   });
 }
