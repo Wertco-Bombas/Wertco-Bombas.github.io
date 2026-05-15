@@ -14,12 +14,11 @@ export default async function handler(req, res) {
   const { username, password } = req.body;
 
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .eq('password_hash', password)
-      .single();
+   const { data, error } = await supabase
+  .from('users')
+  .select('*')
+  .eq('username', username)
+  .maybeSingle();
 
     if (error) {
       return res.status(400).json({ error: error.message });
