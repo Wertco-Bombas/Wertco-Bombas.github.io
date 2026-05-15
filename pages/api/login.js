@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   }
 
   const { username, password } = req.body;
+  console.log("BODY RECEBIDO:", req.body);
 
   const { data, error } = await supabase
     .from('users')
