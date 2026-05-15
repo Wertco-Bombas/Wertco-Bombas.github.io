@@ -1,4 +1,3 @@
-// pages/api/register.js
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -13,18 +12,27 @@ export default async function handler(req, res) {
 
   const { username, password } = req.body;
 
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{ username, password_hash: password, role: 'user' }])
-      .select();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.status(200).json({ ok: true, user: data });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao registrar usuário' });
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username e password são obrigatórios' });
   }
+
+  const { data, error } = await supabase
+    .from('users')
+    .insert([
+      {
+        username,
+        password_hash: password,
+        role: 'user'
+      }
+    ])
+    .select();
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    user: data
+  });
 }
