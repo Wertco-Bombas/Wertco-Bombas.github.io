@@ -1,31 +1,35 @@
-export default function handler(req, res) {
-  res.setHeader('Content-Type', 'application/json');
+import { createClient } from '@supabase/supabase-js';
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY // <-- também usa a Service Role Key
+);
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: "Método não permitido"
-    });
+    return res.status(405).json({ error: 'Método não permitido' });
   }
 
   const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({
-      error: "Usuário e senha obrigatórios"
-    });
-  }
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('password_hash', password)
+      .single();
 
-  // TESTE (depois você troca por banco)
-  if (username === "admin" && password === "admin") {
-    return res.status(200).json({
-      user: {
-        username: "admin",
-        role: "admin"
-      }
-    });
-  }
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
 
-  return res.status(401).json({
-    error: "Usuário ou senha inválidos"
-  });
+    if (!data) {
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+
+    return res.status(200).json({ ok: true, user: data });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro interno no servidor' });
+  }
 }
