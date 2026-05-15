@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_KEY // <-- usa a Service Role Key
 );
 
 export default async function handler(req, res) {
@@ -18,21 +18,12 @@ export default async function handler(req, res) {
 
   const { data, error } = await supabase
     .from('users')
-    .insert([
-      {
-        username,
-        password_hash: password,
-        role: 'user'
-      }
-    ])
+    .insert([{ username, password_hash: password, role: 'user' }])
     .select();
 
   if (error) {
     return res.status(400).json({ error: error.message });
   }
 
-  return res.status(200).json({
-    ok: true,
-    user: data
-  });
+  return res.status(200).json({ ok: true, user: data });
 }
