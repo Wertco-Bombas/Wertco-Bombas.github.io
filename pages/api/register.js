@@ -1,5 +1,5 @@
+// pages/api/register.js
 import { createClient } from '@supabase/supabase-js';
-import bcrypt from 'bcryptjs';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -14,13 +14,14 @@ export default async function handler(req, res) {
   const { username, password } = req.body;
 
   try {
-    const hash = await bcrypt.hash(password, 10);
-
+    // Insere novo usuário na tabela "users"
     const { data, error } = await supabase
       .from('users')
-      .insert([{ username, password_hash: hash }]);
+      .insert([{ username, password_hash: password, role: 'user' }]);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
 
     return res.status(200).json({ ok: true, user: data });
   } catch (err) {
