@@ -1,37 +1,11 @@
-// pages/api/login.js
-import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
+// ...
+const { data } = await supabase
+  .from('users')
+  .select('*')
+  .eq('username', username)
+  .single();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido' });
-  }
-
-  const { username, password } = req.body;
-
-  try {
-    // Busca o usuário na tabela "users" usando password_hash
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .eq('password_hash', password) // <-- usa a coluna correta
-      .single();
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    if (!data) {
-      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
-    }
-
-    return res.status(200).json({ ok: true, user: data });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro interno no servidor' });
-  }
+if (!data || !(await bcrypt.compare(password, data.password_hash))) {
+  return res.status(401).json({ error: 'Usuário ou senha inválidos' });
 }
