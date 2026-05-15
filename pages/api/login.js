@@ -1,4 +1,3 @@
-// pages/api/login.js
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -13,23 +12,23 @@ export default async function handler(req, res) {
 
   const { username, password } = req.body;
 
-  try {
-   const { data, error } = await supabase
-  .from('users')
-  .select('*')
-  .eq('username', username)
-  .maybeSingle();
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .maybeSingle();
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    if (!data) {
-      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
-    }
-
-    return res.status(200).json({ ok: true, user: data });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro interno no servidor' });
+  if (error) {
+    return res.status(400).json({ error: error.message });
   }
+
+  if (!data) {
+    return res.status(401).json({ error: 'Usuário não encontrado' });
+  }
+
+  if (data.password_hash !== password) {
+    return res.status(401).json({ error: 'Senha inválida' });
+  }
+
+  return res.status(200).json({ ok: true, user: data });
 }
