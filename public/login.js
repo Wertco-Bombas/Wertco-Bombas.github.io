@@ -1,45 +1,23 @@
-export default function Login() {
-  async function handleLogin(e) {
-    e.preventDefault();
+export default function handler(req, res) {
 
-    const username = document.getElementById('loginUser').value;
-    const password = document.getElementById('loginPass').value;
-
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        username,
-        password
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error);
-      return;
-    }
-
-    alert('Login feito com sucesso!');
-    console.log(data);
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: "Método não permitido" });
   }
 
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>Login</h1>
+  const { username, password } = req.body;
 
-      <form onSubmit={handleLogin}>
-        <input id="loginUser" placeholder="Usuário" />
-        <br /><br />
+  // TESTE SIMPLES (depois você conecta no Supabase)
+  if (username === "admin" && password === "123") {
+    return res.status(200).json({
+      ok: true,
+      user: {
+        username: "admin",
+        role: "admin"
+      }
+    });
+  }
 
-        <input id="loginPass" type="password" placeholder="Senha" />
-        <br /><br />
-
-        <button type="submit">Entrar</button>
-      </form>
-    </div>
-  );
+  return res.status(401).json({
+    error: "Usuário ou senha inválidos"
+  });
 }
