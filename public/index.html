@@ -6,8 +6,10 @@
   <title>Don — Sistema Completo</title>
   <link rel="stylesheet" href="/style.css">
 </head>
+
 <body>
   <div class="wrap">
+
     <header>
       <div class="brand">
         <span class="brand-icon" aria-hidden="true">👤</span>
@@ -17,38 +19,47 @@
       <div id="headerUser" class="header-user" style="display:none">
         <div class="small" id="headerName"></div>
         <div class="small role" id="headerRole"></div>
-        <button class="btn ghost" id="btnLogout">Sair</button>
+        <button class="btn ghost" id="btnLogout" type="button">Sair</button>
       </div>
     </header>
 
     <!-- LOGIN -->
     <div id="loginScreen" class="login-card">
-      <div class="card login-card-inner" role="form" aria-labelledby="loginTitle">
+
+      <div class="card login-card-inner">
+
         <h2 id="loginTitle" class="login-title">Entrar</h2>
 
-        <label class="small" for="loginUser">Usuário</label>
-        <input id="loginUser" type="text" autocomplete="username" />
+        <!-- IMPORTANTE: evitar submit automático -->
+        <form id="loginForm">
 
-        <label class="small" for="loginPass">Senha</label>
-        <input id="loginPass" type="password" autocomplete="current-password" />
+          <label class="small">Usuário</label>
+          <input id="loginUser" type="text" autocomplete="username" required />
 
-        <!-- 🔥 CORREÇÃO IMPORTANTE -->
-        <button type="button" class="btn full" id="btnLogin" aria-label="Entrar">
-          Entrar
-        </button>
+          <label class="small">Senha</label>
+          <input id="loginPass" type="password" autocomplete="current-password" required />
+
+          <button type="submit" class="btn full" id="btnLogin">
+            Entrar
+          </button>
+
+        </form>
+
       </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="dashboard" style="display:none">
-      <nav class="top-menu" role="navigation" aria-label="Menu principal">
+
+      <nav class="top-menu">
         <div class="menu-item" data-target="page-kb">Base de conhecimento</div>
         <div class="menu-item" data-target="page-user">Usuário</div>
         <div class="menu-item" data-target="page-training">Treinamento</div>
         <div class="menu-item" data-target="page-audit">Auditoria</div>
       </nav>
 
-      <main class="layout" role="main">
+      <main class="layout">
+
         <section id="page-kb" class="page active">
           <h2>Base de Conhecimento</h2>
 
@@ -56,9 +67,9 @@
             <input id="searchAll" type="search" placeholder="Pesquisar...">
             <select id="filterCategory"></select>
 
-            <button class="btn" id="btnNewTopic">Novo Tópico</button>
-            <button class="btn" id="btnNewCategory">Nova Categoria</button>
-            <button class="btn warn" id="btnDeleteCategoryTop">Excluir Categoria</button>
+            <button class="btn" id="btnNewTopic" type="button">Novo Tópico</button>
+            <button class="btn" id="btnNewCategory" type="button">Nova Categoria</button>
+            <button class="btn warn" id="btnDeleteCategoryTop" type="button">Excluir Categoria</button>
           </div>
 
           <div id="topicsList"></div>
@@ -66,12 +77,14 @@
 
         <section id="page-user" class="page">
           <h2>Usuários</h2>
+
           <div class="card">
             <input id="newName" placeholder="Nome">
             <input id="newLogin" placeholder="Usuário">
             <select id="newRole"></select>
             <input id="newPass" type="password" placeholder="Senha">
-            <button id="btnCreateUser">Criar usuário</button>
+
+            <button id="btnCreateUser" type="button">Criar usuário</button>
 
             <div id="usersList"></div>
           </div>
@@ -87,6 +100,7 @@
           <h2>Auditoria</h2>
           <div id="auditLog"></div>
         </section>
+
       </main>
     </div>
   </div>
